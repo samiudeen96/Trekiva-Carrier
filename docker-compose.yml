@@ -1,0 +1,80 @@
+# Development stack: API (auto-reload), Celery worker + beat, PostgreSQL, Redis.
+#   cp .env.example .env   # then fill in values
+#   docker compose up --build
+#   docker compose run --rm api pytest      # run the test suite
+# Production uses docker-compose.prod.yml (see docs/deployment.md).
+
+x-backend: &backend
+  build:
+    context: .
+    target: dev
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+psycopg://trekiva:trekiva@postgres:5432/trekiva
+    REDIS_URL: redis://redis:6379/0
+    ADMIN_UI_DIST: /app/admin-ui/dist
+  volumes:
+    - ./backend:/app/backend
+    - ./admin-ui/dist:/app/admin-ui/dist:ro
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: trekiva
+      POSTGRES_PASSWORD: trekiva
+      POSTGRES_DB: trekiva
+    ports: ["127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trekiva -d trekiva"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"]
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    <<: *backend
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+
+  api:
+    <<: *backend
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    ports: ["127.0.0.1:${API_HOST_PORT:-8000}:8000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    <<: *backend
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "-Q", "default,webhooks", "-l", "info", "--concurrency", "4"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  beat:
+    <<: *backend
+    command: ["celery", "-A", "app.workers.celery_app", "beat", "-l", "info", "--schedule", "/tmp/celerybeat-schedule"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
+  redisdata:

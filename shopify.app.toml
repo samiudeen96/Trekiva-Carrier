@@ -1,0 +1,55 @@
+# Trekiva Logistics: Shopify app configuration.
+# Deploy with the Shopify CLI:  shopify app deploy
+# Replace every "REPLACE_..." value. See docs/shopify-setup.md.
+
+client_id = "REPLACE_WITH_CLIENT_ID"
+name = "Trekiva Logistics"
+application_url = "https://REPLACE_WITH_APP_DOMAIN/"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = false
+include_config_on_deploy = true
+
+[access_scopes]
+# read/write merchant-managed fulfillment orders: read holds, create fulfillments with tracking.
+# write_orders: add (never remove) tags such as an optional TREKIVA-SHIPPED tag.
+scopes = "read_orders,write_orders,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders,read_locations,read_products,read_inventory"
+# Shopify-managed installation: scopes are granted from this file, and the backend obtains its
+# offline token by token exchange (no OAuth redirect).
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = ["https://REPLACE_WITH_APP_DOMAIN/auth/callback"]
+
+[webhooks]
+api_version = "2026-07"
+
+  # All topics go to one HMAC-verified endpoint; the X-Shopify-Topic header selects the handler.
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/shopify"
+  topics = [
+    "orders/create",
+    "orders/updated",
+    "orders/cancelled",
+    "fulfillments/create",
+    "fulfillments/update",
+    "fulfillment_orders/placed_on_hold",
+    "fulfillment_orders/hold_released",
+    "fulfillment_orders/cancelled",
+    "fulfillment_orders/split",
+    "fulfillment_orders/merged",
+    "fulfillment_orders/moved",
+    "fulfillment_orders/order_routing_complete",
+    "fulfillment_orders/rescheduled",
+    "fulfillment_orders/scheduled_fulfillment_order_ready",
+    "app/uninstalled",
+  ]
+
+  # Mandatory only for public (App Store) apps. Handlers already exist; uncomment if required.
+  # [[webhooks.subscriptions]]
+  # uri = "/webhooks/shopify"
+  # compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+
+[pos]
+embedded = false

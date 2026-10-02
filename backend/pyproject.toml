@@ -1,0 +1,38 @@
+[project]
+name = "trekiva-logistics"
+version = "0.1.0"
+description = "Trekiva Logistics: multi-carrier shipping automation for Shopify"
+requires-python = ">=3.12"
+# Runtime dependencies live in requirements.txt (used by the Docker build).
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = ["db: test requires PostgreSQL"]
+filterwarnings = ["ignore::DeprecationWarning:celery.*", "ignore:Using `httpx` with `starlette.testclient`"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "S"]
+ignore = ["S101", "RUF012", "E501"]  # line length is enforced by `ruff format`
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header", "fastapi.Body"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "S311"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+ignore_missing_imports = true
+exclude = ["migrations/"]
+
+[[tool.mypy.overrides]]
+# Celery's decorators are untyped.
+module = ["app.workers.*"]
+disallow_untyped_decorators = false

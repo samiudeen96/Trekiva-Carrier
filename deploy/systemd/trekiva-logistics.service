@@ -1,0 +1,19 @@
+# Starts the Docker Compose stack on boot.
+# Install: sudo cp deploy/systemd/trekiva-logistics.service /etc/systemd/system/
+#          sudo systemctl daemon-reload && sudo systemctl enable --now trekiva-logistics
+[Unit]
+Description=Trekiva Logistics (Docker Compose)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/trekiva-logistics
+ExecStart=/usr/bin/docker compose -f docker-compose.prod.yml --env-file .env up -d
+ExecStop=/usr/bin/docker compose -f docker-compose.prod.yml --env-file .env down
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target
