@@ -17,7 +17,8 @@ The app runs only **after** an order is placed. It never touches checkout, never
 | 2 | Mock end-to-end flow: allocation run → shipment + mock AWB → Shopify fulfillment/tracking; reconciliation, fallback, cancellation; carrier tracking webhooks + polling; Orders/Shipments/Tracking/Logs pages; manual overrides | **Done** |
 | 3 | Ekart adapter from official API docs | Waiting for docs |
 | 4 | XpressBees adapter from official API docs | Waiting for docs |
-| 5 | Production tracking webhooks, error recovery, monitoring, deployment | Planned |
+| 5 | Alerts (email/Slack), health checks, Sentry, metrics, operations runbook | Code complete, tests not yet run |
+| 5 | Real carrier tracking webhooks (with Phases 3/4), VM deployment | Planned |
 
 The full flow runs end to end against the **mock** carriers. Ekart and XpressBees plug in by implementing their adapters (Phases 3 and 4); nothing else changes.
 
@@ -49,7 +50,7 @@ docker compose up --build                        # postgres, redis, migrate, api
 ### Tests and checks
 
 ```bash
-docker compose run --rm api pytest          # 257 tests, real PostgreSQL (separate trekiva_test DB)
+docker compose run --rm api pytest          # real PostgreSQL (separate trekiva_test DB)
 docker compose run --rm api ruff check .
 docker compose run --rm api mypy app        # strict
 ```
@@ -70,6 +71,8 @@ backend/
     logistics/   hold gate, pipeline, state machine, payment detection, offers, allocation/
     tracking/    shipment status progression rules
     webhooks/    Shopify ingress, idempotent storage, processor, topic dispatch
+    alerts/      alert outbox, state-change triggers, Slack/email channels, dispatcher
+    ops/         health checks, worker heartbeat, Prometheus metrics
     workers/     Celery app, tasks, retry policy, beat schedule
   migrations/    Alembic (0001_initial_schema)
   tests/         unit/ + integration/ (PostgreSQL)
@@ -87,6 +90,7 @@ shopify.app.toml scopes + webhook subscriptions (deployed with Shopify CLI)
 - [docs/carrier-adapters.md](docs/carrier-adapters.md): how to add or implement a carrier
 - [docs/shopify-setup.md](docs/shopify-setup.md): creating and installing the Shopify app
 - [docs/deployment.md](docs/deployment.md): Linux VM, Docker, Nginx, Let's Encrypt, backups
+- [docs/operations.md](docs/operations.md): alerts, uptime monitoring, Sentry, metrics, runbook
 
 ## Safety guarantees (and where they are enforced)
 
@@ -105,4 +109,5 @@ shopify.app.toml scopes + webhook subscriptions (deployed with Shopify CLI)
 | Stale or duplicate tracking events never move a shipment backwards | `tracking/transitions.py` + `UNIQUE(shipment_id, dedup_hash)` |
 | No hard-coded carrier logic in the engine | `logistics/allocation/*` sees only `CarrierProfile` / `CarrierOffer` (tested with a third carrier) |
 | Secrets are never stored or returned in plain text | Fernet encryption (`core/crypto.py`); API returns masked hints only |
+| Every failure that needs a person reaches one | `alerts/triggers.py` hooks the *state* (FO → `FAILED`, needs-staff, Shopify sync `FAILED`), not each code path; alert rows commit with the failure (outbox) |
 | No invented carrier endpoints | Ekart and XpressBees adapters raise `CarrierNotImplementedError` until official docs are supplied |

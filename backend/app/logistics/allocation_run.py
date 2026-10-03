@@ -18,6 +18,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import alerts
 from app.carriers.base import CarrierAdapter
 from app.carriers.errors import CarrierError
 from app.carriers.types import CarrierOffer, ServiceabilityRequest
@@ -138,6 +139,17 @@ def _prepare(db: Session, shop: Shop, fo: ShopifyFulfillmentOrder, plan: Shipmen
             adapter = carriers.build_adapter(db, shop, code)
         except (TrekivaError, CarrierError) as exc:
             pre_rejected.append(Rejection(code, "ADAPTER_UNAVAILABLE", str(exc)))
+            if isinstance(exc, CarrierError):
+                alerts.carrier_error(
+                    db,
+                    shop_id=shop.id,
+                    carrier_code=code,
+                    error_class=exc.error_class,
+                    message=exc.message,
+                    during="loading credentials",
+                    order_id=fo.order_id,
+                    fulfillment_order_id=fo.id,
+                )
             continue
         adapters[code] = adapter
         ref = carriers.warehouse_ref(db, adapter.config.account_id, plan.warehouse_id)
@@ -260,6 +272,17 @@ def run_allocation(
                 if isinstance(timed.outcome, OfferFailure)
                 else LogLevel.INFO,
             )
+            if isinstance(timed.outcome, OfferFailure):
+                alerts.carrier_error(
+                    db,
+                    shop_id=fo.shop_id,
+                    carrier_code=code,
+                    error_class=timed.outcome.error_class,
+                    message=timed.outcome.message,
+                    during="serviceability check",
+                    order_id=fo.order_id,
+                    fulfillment_order_id=fo.id,
+                )
 
         selected = result.selected
         if selected is None:

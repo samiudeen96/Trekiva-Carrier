@@ -63,6 +63,7 @@ def cancel_shipment(self: Task, shipment_id: int, reallocate: bool, actor: str, 
         reallocate=reallocate,
         actor=actor,
         reason=reason,
+        attempt=self.request.retries,
     )
 
 

@@ -15,6 +15,7 @@ from datetime import timedelta
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from app import alerts
 from app.carriers.errors import CarrierError, CarrierNotSupportedError
 from app.carriers.types import ShipmentRef, TrackingUpdate
 from app.core.db import session_scope
@@ -220,6 +221,17 @@ def poll_shipment(shipment_id: int) -> StepResult:
         with session_scope() as db:
             s = lock_shipment(db, shipment_id)
             s.next_poll_at = utcnow() + timedelta(minutes=30)
+            alerts.carrier_error(
+                db,
+                shop_id=s.shop_id,
+                carrier_code=s.carrier_code,
+                error_class=exc.error_class,
+                message=exc.message,
+                during="tracking poll",
+                order_id=s.order_id,
+                fulfillment_order_id=s.fulfillment_order_id,
+                shipment_id=s.id,
+            )
         return StepResult("error", detail=exc.message)
     with session_scope() as db:
         shipment = lock_shipment(db, shipment_id)

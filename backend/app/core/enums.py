@@ -117,3 +117,26 @@ class TrackingSource(StrEnum):
     POLL = "POLL"
     MANUAL = "MANUAL"
     SYSTEM = "SYSTEM"
+
+
+class AlertSeverity(StrEnum):
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
+
+    @property
+    def rank(self) -> int:
+        return _SEVERITY_RANK[self]
+
+
+_SEVERITY_RANK = {AlertSeverity.WARNING: 0, AlertSeverity.ERROR: 1, AlertSeverity.CRITICAL: 2}
+
+
+class AlertStatus(StrEnum):
+    PENDING = "PENDING"
+    SENDING = "SENDING"
+    SENT = "SENT"
+    FAILED = "FAILED"
+    """Every delivery attempt failed (see `last_error`)."""
+    SKIPPED = "SKIPPED"
+    """No channel configured, or below ALERT_MIN_SEVERITY. Kept for the record only."""

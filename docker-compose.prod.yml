@@ -59,7 +59,7 @@ services:
 
   worker:
     <<: *backend
-    command: ["celery", "-A", "app.workers.celery_app", "worker", "-Q", "default,webhooks", "-l", "info", "--concurrency", "4"]
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "-Q", "default,webhooks,ops", "-l", "info", "--concurrency", "4"]
     depends_on:
       migrate:
         condition: service_completed_successfully

@@ -40,6 +40,10 @@ os.environ.update(
     }
 )
 os.environ.pop("DEV_AUTH_BYPASS_SHOP", None)
+# docker compose injects .env: tests must never send real alerts or Sentry events.
+for _key in list(os.environ):
+    if _key.startswith(("ALERT_", "SMTP_", "SENTRY_", "METRICS_", "OPS_")):
+        del os.environ[_key]
 
 import pytest  # noqa: E402
 from sqlalchemy import create_engine, text  # noqa: E402

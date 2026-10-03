@@ -14,7 +14,8 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.enums import LogisticsStatus, LogLevel, PaymentMode, ShipmentStatus
+from app import alerts
+from app.core.enums import AlertSeverity, LogisticsStatus, LogLevel, PaymentMode, ShipmentStatus
 from app.core.time import utcnow
 from app.logistics.hold_gate import (
     GateAction,
@@ -296,6 +297,17 @@ def _on_shipped_order_cancelled(
             step=audit.Step.CANCELLED,
             level=LogLevel.WARNING,
             message=f"{order.name}: {fo.status_detail} (AWB {shipment.awb})",
+            shop_id=shop.id,
+            order_id=order.id,
+            fulfillment_order_id=fo.id,
+            shipment_id=shipment.id,
+        )
+        alerts.raise_alert(
+            db,
+            kind=alerts.AlertKind.RTO_NEEDED,
+            severity=AlertSeverity.WARNING,
+            title="Cancelled order still has an active shipment",
+            detail=f"{fo.status_detail} ({shipment.carrier_code} AWB {shipment.awb})",
             shop_id=shop.id,
             order_id=order.id,
             fulfillment_order_id=fo.id,

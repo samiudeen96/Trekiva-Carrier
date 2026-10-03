@@ -29,7 +29,8 @@ from tests.harness import Runner, TaskQueue, setup_logistics
 pytestmark = pytest.mark.db
 
 TABLES = (
-    "tracking_events, carrier_quotes, carrier_serviceability_checks, automation_logs, shipments, "
+    "alerts, tracking_events, carrier_quotes, carrier_serviceability_checks, automation_logs, "
+    "shipments, "
     "shopify_fulfillment_orders, shopify_orders, carrier_warehouse_mappings, carrier_settings, "
     "carrier_accounts, allocation_rules, warehouses, webhook_events, shops"
 )

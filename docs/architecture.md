@@ -157,6 +157,42 @@ Lost tasks and dead workers are recovered from the database:
 | Shipment with an AWB but no Shopify fulfillment | re-sync |
 | `AWAITING_ALLOCATION` orders | dispatched once shop automation is on |
 
+## Alerts and monitoring (`alerts/`, `ops/`)
+
+Failures that need a person are sent to Slack and/or email. Operating procedures for each alert are in [operations.md](operations.md).
+
+**Outbox.** `alerts.raise_alert` only adds an `alerts` row to the current transaction. The alert therefore exists exactly when the failure is committed, and nothing is sent from inside a business transaction. `alerts.dispatch` (beat, every 30 s) delivers rows in three steps, like shipment creation:
+1. Claim the rows (`FOR UPDATE SKIP LOCKED`, mark them `SENDING`) and commit.
+2. Send with no locks held.
+3. Record the outcome.
+
+A failed channel is retried alone, with backoff, up to 8 attempts.
+
+**Where alerts come from:**
+
+| Source | Alert |
+|---|---|
+| `before_flush` listener (`alerts/triggers.py`): a fulfillment order *enters* `FAILED` | `SHIPMENT_FAILED` |
+| same: reason becomes `RECONCILIATION_NEEDS_STAFF` | `SHIPMENT_NEEDS_STAFF` |
+| same: `shipments.shopify_sync_status` becomes `FAILED` | `SHOPIFY_SYNC_FAILED` |
+| `CarrierAuthError` during serviceability, setup, create, reconcile, cancel or tracking poll | `CARRIER_AUTH_FAILED` |
+| Carrier refused a cancellation (not retryable); Shopify fulfillment not cancelled | `CARRIER_CANCEL_FAILED`, `SHOPIFY_SYNC_FAILED` |
+| Order cancelled in Shopify while its shipment cannot be auto-cancelled | `RTO_NEEDED` |
+| `ops.health_check` (beat, every 5 min): no progress for `OPS_STUCK_MINUTES` | `STUCK_ORDERS`, `SHOPIFY_SYNC_STALLED` |
+| same: webhook events `FAILED` in the last 24 h; Celery queue over threshold | `WEBHOOKS_FAILING`, `QUEUE_BACKLOG` |
+
+The state-change alerts hook the state, not the code paths into it. A new route into `FAILED` therefore always alerts.
+
+**No floods:**
+- Each alert has a `fingerprint`: kind + shop, plus the reason for `SHIPMENT_FAILED` and the carrier for `CARRIER_AUTH_FAILED`.
+- Once a fingerprint is sent, newer rows with it wait for `ALERT_COOLDOWN_MINUTES`, then go out as one grouped message.
+- Health checks store the ids they reported, so an order that stays stuck is reported once, then reminded daily.
+
+**Monitoring:**
+- Sentry (optional, `SENTRY_DSN`) for the API, worker and beat. It never receives customer data: no PII, no request bodies, no local variables.
+- `/metrics` (Prometheus, token-protected) computes gauges from PostgreSQL and Redis at scrape time.
+- `/healthz/worker` returns 503 when the beat-scheduled heartbeat is older than 3 min. The app cannot alert about its own worker being down, so an external uptime monitor watches this endpoint.
+
 ## State machines
 
 ### Fulfillment order (`logistics_status`)
@@ -249,7 +285,7 @@ Every rejection carries a reason code and a readable detail, stored in `carrier_
 |---|---|
 | Network error, HTTP 5xx, 429, Shopify THROTTLED | Retry with backoff (the GraphQL client honours `extensions.cost` restore rates) |
 | Validation (invalid pincode, bad weight) | No retry. Try the next ranked carrier, or end in `NO_CARRIER_AVAILABLE`/`FAILED` with the reason |
-| Carrier auth failure | No retry. Admin alert; carrier skipped until fixed |
+| Carrier auth failure | No retry. `CARRIER_AUTH_FAILED` alert (critical); the carrier is skipped until its credentials are fixed |
 | Ambiguous create | Reconcile first (see above) |
 
 ## Security

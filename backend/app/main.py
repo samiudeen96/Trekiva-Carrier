@@ -10,12 +10,15 @@ from fastapi.responses import JSONResponse
 from app import carriers as _carriers  # noqa: F401  (registers carrier adapters)
 from app.admin.logistics_routes import router as logistics_router
 from app.admin.routes import router as admin_router
+from app.alerts.channels import configured_channels
 from app.api.health import router as health_router
+from app.api.metrics import router as metrics_router
 from app.api.spa import mount_static
 from app.api.spa import router as spa_router
 from app.core.config import get_settings
 from app.core.errors import TrekivaError
 from app.core.logging import configure_logging
+from app.core.monitoring import init_sentry
 from app.shopify.errors import ShopifyAuthError, ShopifyError
 from app.webhooks.carriers import router as carrier_webhook_router
 from app.webhooks.shopify import router as shopify_webhook_router
@@ -26,6 +29,9 @@ log = logging.getLogger(__name__)
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level, json_output=settings.log_json)
+    init_sentry("api")
+    if settings.is_production and not configured_channels(settings):
+        log.warning("No alert channel configured: failures will only appear in the Logs page")
     docs = not settings.is_production
     app = FastAPI(
         title="Trekiva Logistics",
@@ -47,6 +53,7 @@ def create_app() -> FastAPI:
         return JSONResponse({"error": "shopify_error", "message": str(exc)}, status_code=status)
 
     app.include_router(health_router)
+    app.include_router(metrics_router)
     app.include_router(shopify_webhook_router)
     app.include_router(carrier_webhook_router)
     app.include_router(admin_router)

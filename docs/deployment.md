@@ -36,6 +36,8 @@ Edit `.env` for production:
 | `ENCRYPTION_KEYS` | a freshly generated Fernet key. **Back it up separately**: losing it makes stored tokens and credentials unreadable. |
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | a strong password |
 | `LOG_JSON` | `true` |
+| `ALERT_SLACK_WEBHOOK_URL` and/or `ALERT_EMAIL_TO` + `SMTP_*` | at least one alert channel ([operations.md](operations.md#2-alerts-setup)) |
+| `SENTRY_DSN`, `METRICS_TOKEN` | optional ([operations.md](operations.md#4-sentry-optional)) |
 
 Start the stack:
 
@@ -114,7 +116,8 @@ Celery tasks are safe to run twice and webhooks are stored before processing, so
 ## 6. Operations
 
 - Logs: `docker compose -f docker-compose.prod.yml logs -f api worker beat` (JSON lines).
-- Health: `/healthz` and `/readyz`. Point an uptime monitor at `https://<domain>/readyz`.
+- Health: `/healthz`, `/readyz` and `/healthz/worker`. Point an external uptime monitor at both `https://<domain>/readyz` and `https://<domain>/healthz/worker`.
+- Alerts: after configuring a channel, run `docker compose -f docker-compose.prod.yml run --rm api python -m app.alerts test`.
 - Webhook backlog (SQL): `SELECT processing_status, count(*) FROM webhook_events GROUP BY 1;`
 - Key rotation: put the new key first in `ENCRYPTION_KEYS`, keep the old key after it, and restart. Old ciphertexts still decrypt.
-- Phase 5 adds error alerting (email/Slack), metrics and a runbook.
+- Alerts, monitoring, procedures and routine checks: [operations.md](operations.md).

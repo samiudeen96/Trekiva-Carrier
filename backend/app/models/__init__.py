@@ -1,5 +1,6 @@
 """ORM models. Importing this package registers every table on `Base.metadata`."""
 
+from app.models.alert import Alert
 from app.models.allocation import AllocationRule
 from app.models.audit import AutomationLog
 from app.models.carrier import CarrierAccount, CarrierSetting, CarrierWarehouseMapping
@@ -12,6 +13,7 @@ from app.models.warehouse import Warehouse
 from app.models.webhook import WebhookEvent
 
 __all__ = [
+    "Alert",
     "AllocationRule",
     "AutomationLog",
     "CarrierAccount",

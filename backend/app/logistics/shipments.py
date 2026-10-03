@@ -26,6 +26,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app import alerts
 from app.carriers.base import CarrierAdapter
 from app.carriers.errors import (
     CarrierAmbiguousError,
@@ -36,6 +37,7 @@ from app.carriers.errors import (
 from app.carriers.types import CreateShipmentRequest, ShipmentRef, ShipmentResult
 from app.core.db import session_scope
 from app.core.enums import (
+    AlertSeverity,
     LogisticsStatus,
     LogLevel,
     ShipmentStatus,
@@ -66,6 +68,8 @@ from app.workers.retry import backoff_seconds
 logger = logging.getLogger(__name__)
 
 MAX_RECONCILE_ATTEMPTS = 6
+CANCEL_ALERT_AFTER_RETRIES = 3
+"""A retryable cancellation still failing after this many retries is alerted (once)."""
 _CLAIMED_ELSEWHERE = frozenset(
     {LogisticsStatus.SHIPMENT_PENDING, LogisticsStatus.RECONCILING, LogisticsStatus.SHIPPED}
 )
@@ -161,6 +165,17 @@ def create_shipment(
                 fo, LogisticsStatus.FAILED, getattr(exc, "reason", "SHIPMENT_SETUP_FAILED"), detail
             )
             log(db, fo, audit.Step.SHIPMENT_FAILED, detail, level=LogLevel.ERROR)
+            if isinstance(exc, CarrierError) and code:
+                alerts.carrier_error(
+                    db,
+                    shop_id=fo.shop_id,
+                    carrier_code=code,
+                    error_class=exc.error_class,
+                    message=exc.message,
+                    during="shipment setup",
+                    order_id=fo.order_id,
+                    fulfillment_order_id=fo.id,
+                )
             return StepResult("failed", detail=detail)
 
         attempt = _attempts(db, fo.id) + 1
@@ -291,6 +306,17 @@ def create_shipment(
             audit.Step.SHIPMENT_FAILED,
             f"{code} rejected the shipment: {message}",
             level=LogLevel.ERROR,
+            shipment_id=shipment.id,
+        )
+        alerts.carrier_error(
+            db,
+            shop_id=fo.shop_id,
+            carrier_code=code,
+            error_class=type(failure).__name__,
+            message=str(failure),
+            during="shipment creation",
+            order_id=fo.order_id,
+            fulfillment_order_id=fo.id,
             shipment_id=shipment.id,
         )
         return _fallback_or_fail(db, fo, code, message)
@@ -441,6 +467,17 @@ def reconcile_shipment(shipment_id: int) -> StepResult:
         if shipment.status != ShipmentStatus.CREATION_UNKNOWN:
             return StepResult("not_needed")
         if error is not None:
+            alerts.carrier_error(
+                db,
+                shop_id=shipment.shop_id,
+                carrier_code=shipment.carrier_code,
+                error_class=error.error_class,
+                message=error.message,
+                during="reconciliation",
+                order_id=shipment.order_id,
+                fulfillment_order_id=fo.id,
+                shipment_id=shipment.id,
+            )
             if (
                 isinstance(error, CarrierNotSupportedError)
                 or attempt >= MAX_RECONCILE_ATTEMPTS
@@ -548,6 +585,7 @@ def cancel_shipment(
     actor: str,
     reason: str,
     admin_factory: shops.AdminFactory = shops.default_admin_factory,
+    attempt: int = 0,
 ) -> StepResult:
     """Cancel with the carrier first; only then free the fulfillment order for another carrier."""
     with session_scope() as db:
@@ -605,6 +643,31 @@ def cancel_shipment(
                 actor=actor,
             )
             retry = backoff_seconds(0) if error is not None and error.retryable else None
+            if error is not None:
+                alerts.carrier_error(
+                    db,
+                    shop_id=shipment.shop_id,
+                    carrier_code=shipment.carrier_code,
+                    error_class=error.error_class,
+                    message=error.message,
+                    during="cancellation",
+                    order_id=shipment.order_id,
+                    fulfillment_order_id=fo.id,
+                    shipment_id=shipment.id,
+                )
+            if retry is None or attempt == CANCEL_ALERT_AFTER_RETRIES:
+                alerts.raise_alert(
+                    db,
+                    kind=alerts.AlertKind.CARRIER_CANCEL_FAILED,
+                    severity=AlertSeverity.ERROR,
+                    title="Carrier did not cancel a shipment",
+                    detail=f"{shipment.carrier_code} AWB {shipment.awb}: {refusal}. "
+                    "Cancel it in the carrier panel before it is picked up.",
+                    shop_id=shipment.shop_id,
+                    order_id=shipment.order_id,
+                    fulfillment_order_id=fo.id,
+                    shipment_id=shipment.id,
+                )
             return StepResult("cancel_failed", detail=refusal or "", retry_in=retry)
 
         shipment.status = ShipmentStatus.CANCELLED
@@ -632,6 +695,19 @@ def cancel_shipment(
                 )
             except Exception as exc:
                 shipment.shopify_sync_error = f"Fulfillment cancel failed: {exc}"
+                alerts.raise_alert(
+                    db,
+                    kind=alerts.AlertKind.SHOPIFY_SYNC_FAILED,
+                    severity=AlertSeverity.ERROR,
+                    title="Shopify fulfillment not cancelled",
+                    fingerprint=f"SHOPIFY_FULFILLMENT_CANCEL:{shipment.shop_id}",
+                    detail=f"{shipment.carrier_code} AWB {shipment.awb} was cancelled with the "
+                    f"carrier, but its Shopify fulfillment was not ({exc}). Cancel it in Shopify.",
+                    shop_id=shipment.shop_id,
+                    order_id=shipment.order_id,
+                    fulfillment_order_id=fo.id,
+                    shipment_id=shipment.id,
+                )
                 log(
                     db,
                     fo,

@@ -43,14 +43,14 @@ SHOPIFY_EVENT_STATUS: dict[TrackingStatus, str | None] = {
     TrackingStatus.CANCELLED: None,
 }
 
-_NOT_SYNCABLE = {
+NOT_SYNCABLE = {
     ShipmentStatus.CREATING,
     ShipmentStatus.CREATION_UNKNOWN,
     ShipmentStatus.CREATE_FAILED,
     ShipmentStatus.CANCELLED,
     ShipmentStatus.CANCEL_REQUESTED,
 }
-_BEFORE_PICKUP = {ShipmentStatus.AWB_CREATED, ShipmentStatus.PICKUP_SCHEDULED}
+BEFORE_PICKUP = {ShipmentStatus.AWB_CREATED, ShipmentStatus.PICKUP_SCHEDULED}
 
 
 def sync_to_shopify(
@@ -63,13 +63,13 @@ def sync_to_shopify(
         shipment = lock_shipment(db, shipment_id)
         if shipment.shopify_fulfillment_id:
             return StepResult("already_synced")
-        if shipment.status in _NOT_SYNCABLE or not shipment.awb:
+        if shipment.status in NOT_SYNCABLE or not shipment.awb:
             return StepResult("not_syncable", detail=shipment.status.value)
         shop = db.get(Shop, shipment.shop_id)
         fo = db.get(ShopifyFulfillmentOrder, shipment.fulfillment_order_id)
         assert shop is not None and fo is not None
         settings = ShopSettings.load(shop.settings)
-        if settings.fulfill_on == "PICKED_UP" and shipment.status in _BEFORE_PICKUP:
+        if settings.fulfill_on == "PICKED_UP" and shipment.status in BEFORE_PICKUP:
             return StepResult("deferred_until_pickup")
 
         admin = admin_factory(db, shop)

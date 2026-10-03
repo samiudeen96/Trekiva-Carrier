@@ -1,6 +1,6 @@
 # Database schema
 
-PostgreSQL 16. The schema is managed by Alembic (`backend/migrations/versions/`: `0001_initial_schema`, `0002_allocation_and_tracking_fields`). Conventions:
+PostgreSQL 16. The schema is managed by Alembic (`backend/migrations/versions/`: `0001_initial_schema`, `0002_allocation_and_tracking_fields`, `0003_alerts`). Conventions:
 - Primary keys are `bigint` identity columns.
 - Shopify IDs are stored as GID text.
 - Money is `numeric(12,2)` with a currency code.
@@ -113,3 +113,10 @@ Columns:
 
 ### `automation_logs`
 Append-only audit trail. Columns: `shop_id`, `order_id`, `fulfillment_order_id`, `shipment_id`, `run_id`, `step`, `level`, `message`, `data` (JSONB), `actor` (`system` or `staff:<user id>`), `created_at`. Indexed by `(order_id, created_at)` and `(shop_id, created_at)`.
+
+### `alerts`
+Operator alert outbox (migration `0003`). Rows are written in the same transaction as the failure they describe and delivered by `alerts.dispatch`.
+- **What happened:** `shop_id` (null for system-wide alerts), `kind`, `severity` (`WARNING`/`ERROR`/`CRITICAL`), `fingerprint` (the grouping and rate-limit key), `title`, `detail`, `order_id`, `fulfillment_order_id`, `shipment_id` (`SET NULL` on delete), `data` (JSONB; health checks store the ids they reported).
+- **Delivery:** `status` (`PENDING`/`SENDING`/`SENT`/`FAILED`/`SKIPPED`), `attempts`, `delivered_channels` (JSONB), `last_error`, `next_attempt_at`, `claimed_at`, `sent_at`, `created_at`.
+- **Indexes:** `(status, next_attempt_at)` and `(fingerprint, sent_at)`.
+- **Retention:** sent, skipped and failed rows are deleted after 90 days.

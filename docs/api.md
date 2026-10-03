@@ -8,7 +8,17 @@ The live OpenAPI schema is served at `/api/docs` and `/api/openapi.json` (disabl
 |---|---|
 | `/api/admin/*` | `Authorization: Bearer <App Bridge session token>`. App Bridge adds it to `fetch` calls from the embedded UI. Verified for HS256 signature (client secret), `exp`/`nbf`, `aud` = client id, and matching shop in `iss`/`dest`. The shop must be in `SHOPIFY_SHOP_ALLOWLIST` (if set). On first use the token is exchanged for an offline access token. |
 | `/webhooks/shopify` | `X-Shopify-Hmac-Sha256`: base64 HMAC-SHA256 of the raw body with the client secret |
-| `/healthz`, `/readyz` | none |
+| `/healthz`, `/readyz`, `/healthz/worker` | none |
+| `/metrics` | `Authorization: Bearer <METRICS_TOKEN>`; 404 when `METRICS_TOKEN` is unset. Blocked by Nginx; scrape `127.0.0.1:8000` on the VM |
+
+### Health and metrics
+
+| Path | Returns |
+|---|---|
+| `/healthz` | 200 while the API process is up |
+| `/readyz` | 200 if PostgreSQL and Redis answer, else 503 |
+| `/healthz/worker` | 200 if a Celery worker ran the heartbeat in the last 3 min (proves beat + Redis + worker), else 503 |
+| `/metrics` | Prometheus text format: fulfillment orders, shipments, Shopify sync, webhook events and alerts by status; stuck orders; stalled Shopify syncs; queue lengths; worker heartbeat age; Redis up |
 
 Errors return `{"error": "<code>", "message": "<text>"}` with an appropriate status (401, 403, 404, 409, 422, 502). Request validation errors use FastAPI's `422 {"detail": [...]}`.
 
