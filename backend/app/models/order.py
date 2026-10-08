@@ -31,7 +31,10 @@ class ShopifyOrder(IdMixin, TimestampMixin, Base):
     refreshed from the GraphQL Admin API every time the order is evaluated."""
 
     __tablename__ = "shopify_orders"
-    __table_args__ = (UniqueConstraint("shop_id", "shopify_order_id"),)
+    __table_args__ = (
+        UniqueConstraint("shop_id", "shopify_order_id"),
+        Index(None, "shop_id", "shopify_created_at"),
+    )
 
     shop_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("shops.id", ondelete="CASCADE"), nullable=False
@@ -104,6 +107,12 @@ class ShopifyFulfillmentOrder(IdMixin, TimestampMixin, Base):
     review_override_by: Mapped[str | None] = mapped_column(String(255))
     last_evaluated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # --- Trekiva review checks (location risk, duplicates) -------------------------------------
+    review_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    """When the review checks ran. They run once, when the order is first ready to ship."""
+    review_flags: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list, nullable=False)
+    """What the checks found: [{"kind", "tag", "detail"}]. Empty = nothing suspicious."""
 
     # --- allocation ------------------------------------------------------------------------
     selected_carrier_code: Mapped[str | None] = mapped_column(String(40))

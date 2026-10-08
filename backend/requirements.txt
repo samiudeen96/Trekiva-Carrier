@@ -12,3 +12,4 @@ httpx>=0.28,<1
 cryptography>=43
 pyjwt>=2.9,<3
 sentry-sdk>=2.19,<3
+geoip2>=4.8,<6

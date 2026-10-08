@@ -8,7 +8,7 @@ from typing import Any
 
 from celery import Task
 
-from app.logistics import allocation_run, shipments, shopify_sync, sweeper
+from app.logistics import allocation_run, review_checks, shipments, shopify_sync, sweeper
 from app.logistics.results import StepResult
 from app.tracking import service as tracking
 from app.workers.celery_app import celery_app
@@ -47,6 +47,11 @@ def reconcile(self: Task, shipment_id: int) -> str:
 @celery_app.task(bind=True, name="logistics.sync_shopify", max_retries=MAX_RETRIES)
 def sync_shopify(self: Task, shipment_id: int) -> str:
     return _run(self, shopify_sync.sync_to_shopify, shipment_id, attempt=self.request.retries)
+
+
+@celery_app.task(bind=True, name="logistics.place_review_hold", max_retries=MAX_RETRIES)
+def place_review_hold(self: Task, fo_id: int) -> str:
+    return _run(self, review_checks.place_review_hold, fo_id, attempt=self.request.retries)
 
 
 @celery_app.task(bind=True, name="logistics.push_tracking", max_retries=MAX_RETRIES)

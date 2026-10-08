@@ -18,6 +18,7 @@ from app.shopify.queries import (
     FULFILLMENT_CREATE,
     FULFILLMENT_EVENT_CREATE,
     FULFILLMENT_ORDER_FULFILLMENTS,
+    FULFILLMENT_ORDER_HOLD,
     FULFILLMENT_ORDER_PARENT,
     ORDER_FOR_LOGISTICS,
     TAGS_ADD,
@@ -106,6 +107,19 @@ class ShopifyAdmin:
     def cancel_fulfillment(self, fulfillment_gid: str) -> None:
         data = self.client.execute(FULFILLMENT_CANCEL, {"id": fulfillment_gid})
         raise_on_user_errors(data.get("fulfillmentCancel"), "fulfillmentCancel")
+
+    def hold_fulfillment_order(self, fulfillment_order_gid: str, *, reason: str, notes: str) -> str:
+        """Place a fulfillment hold. `reason` is a FulfillmentHoldReason (HIGH_RISK_OF_FRAUD,
+        OTHER, ...). Trekiva only ever places holds; staff release them in Shopify."""
+        data = self.client.execute(
+            FULFILLMENT_ORDER_HOLD,
+            {
+                "id": fulfillment_order_gid,
+                "fulfillmentHold": {"reason": reason, "reasonNotes": notes[:255]},
+            },
+        )
+        payload = raise_on_user_errors(data.get("fulfillmentOrderHold"), "fulfillmentOrderHold")
+        return str((payload.get("fulfillmentHold") or {}).get("id") or "")
 
     def add_tags(self, resource_gid: str, tags: list[str]) -> None:
         data = self.client.execute(TAGS_ADD, {"id": resource_gid, "tags": tags})

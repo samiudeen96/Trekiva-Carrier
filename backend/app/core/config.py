@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     carrier_http_timeout_seconds: float = 20.0
     carrier_offer_timeout_seconds: float = 15.0
 
+    # --- Review checks ---------------------------------------------------------------------
+    geoip_city_db_path: str = ""
+    """Path to a MaxMind GeoLite2-City (or GeoIP2-City) .mmdb file, used by the location risk
+    check. Empty = the IP comparison is skipped (the billing-address comparison still runs)."""
+
     # --- Alerts ----------------------------------------------------------------------------
     alert_slack_webhook_url: SecretStr = SecretStr("")
     """Slack incoming-webhook URL. Empty = Slack alerts off."""

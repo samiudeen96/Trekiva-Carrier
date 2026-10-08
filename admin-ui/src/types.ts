@@ -49,6 +49,13 @@ export interface ShopSettings {
   risk_wait_max_seconds: number;
   review_tags: string[];
   block_on_high_risk: boolean;
+  location_check_enabled: boolean;
+  location_check_ip: boolean;
+  location_check_billing: boolean;
+  risk_review_tag: string;
+  duplicate_check_enabled: boolean;
+  duplicate_window_hours: number;
+  duplicate_review_tag: string;
   cod_gateway_names: string[];
   fulfill_on: FulfillOn;
   notify_customer: boolean;

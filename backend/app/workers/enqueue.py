@@ -26,6 +26,7 @@ SYNC_SHOPIFY = "logistics.sync_shopify"
 PUSH_TRACKING = "logistics.push_tracking"
 CANCEL_SHIPMENT = "logistics.cancel_shipment"
 POLL_TRACKING = "tracking.poll"
+PLACE_REVIEW_HOLD = "logistics.place_review_hold"
 
 
 def enqueue(task_name: str, *args: Any, countdown: float | None = None) -> bool:

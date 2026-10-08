@@ -16,6 +16,7 @@ x-backend: &backend
   volumes:
     - ./backend:/app/backend
     - ./admin-ui/dist:/app/admin-ui/dist:ro
+    - ./geoip:/app/geoip:ro
   depends_on:
     postgres:
       condition: service_healthy

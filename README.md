@@ -22,6 +22,21 @@ The app runs only **after** an order is placed. It never touches checkout, never
 
 The full flow runs end to end against the **mock** carriers. Ekart and XpressBees plug in by implementing their adapters (Phases 3 and 4); nothing else changes.
 
+## Review checks (risk orders and duplicates)
+
+Customers are never stopped from ordering. Once per order, when it is otherwise ready to ship, Trekiva checks:
+
+| Check | Flags the order when | Tag |
+|---|---|---|
+| Location risk | The customer's IP location, or the billing address, is in a different **state** (or country) than the delivery address. Example: ordered from Mumbai, delivering to Chennai. Missing data never flags an order. | `RISK-REVIEW` |
+| Duplicate order | Another order placed within 24 hours (either side) has the **same phone number, the same customer name and at least one SKU in common**. Cancelled orders are ignored. | `DUPLICATE-REVIEW` |
+
+A flagged order is **not** shipped. Trekiva puts its fulfillment order on hold in Shopify (`HIGH_RISK_OF_FRAUD` for location risk, `OTHER` for duplicates, with the reason in the hold notes) and adds the tag, so the alert shows on the Shopify order and in Trekiva's Manual Review page. Staff contact the customer, then either cancel the order or **release the hold in Shopify**; Trekiva then ships it automatically and does not flag it again. If Shopify refuses the hold, the order stays in Manual Review and staff can approve it there.
+
+Each check can be switched off, and the window and tags changed, under **Settings → Review checks**. Code: `logistics/review_checks.py`.
+
+**IP location setup.** The IP comparison needs a MaxMind GeoLite2-City database (free account at maxmind.com). Put `GeoLite2-City.mmdb` in `./geoip/` (mounted into the containers) and set `GEOIP_CITY_DB_PATH=/app/geoip/GeoLite2-City.mmdb`. Lookups are local, so customer IPs are never sent to a third party. Without the file, the IP comparison is skipped and the billing-address comparison still runs. Before going live, place a test order and confirm that Shopify's `clientIp` is the customer's IP: if an app such as COD King creates orders from its own servers, the IP is the app's, not the customer's, and the IP comparison should be switched off.
+
 ### Trying it in a development store
 
 1. Configure a warehouse mapped to your Shopify location, and a `MOCK` account for both carriers (Carriers page). Enable both carriers and turn automation on.
@@ -99,6 +114,7 @@ shopify.app.toml scopes + webhook subscriptions (deployed with Shopify CLI)
 | Held fulfillment orders never reach a courier | `logistics/hold_gate.py` (checked first, on every evaluation); Shopify also rejects fulfilling held orders |
 | Flow review tags block even if the hold has not landed yet | `hold_gate.py` (`REVIEW_TAG_WITHOUT_HOLD`) plus a settle window and a wait for risk analysis |
 | The app never releases holds | No hold-release mutation exists in the codebase; the UI only explains "release in Shopify" |
+| Risk and duplicate orders are held, not shipped | `logistics/review_checks.py` flags the order before allocation; the gate blocks it (`REVIEW_CHECK_FLAGGED`) until the Shopify hold Trekiva places is released |
 | One active AWB per fulfillment order | PostgreSQL partial unique index `uq_shipments_active_fulfillment_order` |
 | A webhook is processed at most once | `UNIQUE(source, external_event_id)` plus an atomic claim (`webhooks/processor.py`) |
 | Holds are re-checked live immediately before every carrier call | `logistics/shipments.py` (re-reads Shopify under the fulfillment-order row lock) |

@@ -13,6 +13,7 @@ from app.core.enums import CarrierEnvironment
 from app.logistics.allocation_run import run_allocation
 from app.logistics.pipeline import sync_order
 from app.logistics.results import StepResult
+from app.logistics.review_checks import place_review_hold
 from app.logistics.shipments import cancel_shipment, create_shipment, reconcile_shipment
 from app.logistics.shopify_sync import push_tracking, sync_to_shopify
 from app.models import Shop, Warehouse
@@ -82,6 +83,7 @@ class Runner:
             q.ORDER_SYNC: order_sync,
             q.WEBHOOK_PROCESS: webhook,
             q.POLL_TRACKING: poll_shipment,
+            q.PLACE_REVIEW_HOLD: lambda fo_id: place_review_hold(fo_id, admin_factory=f),  # type: ignore[arg-type]
         }
 
     def drain(self, *, max_steps: int = 100, follow_retries: bool = True) -> list[tuple[str, str]]:

@@ -85,12 +85,18 @@ def order_json(
     recommendation: str | None = "ACCEPT",
     fulfillment_orders: list[dict[str, Any]] | None = None,
     shipping_address: dict[str, Any] | bool | None = True,
+    phone: str | None = None,
+    customer_name: str = "Asha Rao",
+    client_ip: str | None = None,
+    billing_address: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     created = created_at or NOW - timedelta(hours=1)
+    # Unique per order by default, so unrelated test orders never look like duplicates.
+    phone = phone or f"+9198{order_id:08d}"
     address: dict[str, Any] | None
     if shipping_address is True:
         address = {
-            "name": "Asha Rao",
+            "name": customer_name,
             "company": None,
             "address1": "12 MG Road",
             "address2": None,
@@ -100,7 +106,7 @@ def order_json(
             "zip": pincode,
             "country": "India",
             "countryCodeV2": "IN",
-            "phone": "+919800000000",
+            "phone": phone,
         }
     elif shipping_address in (False, None):
         address = None
@@ -114,15 +120,17 @@ def order_json(
         "closed": False,
         "tags": tags or [],
         "email": "asha@example.com",
-        "phone": "+919800000000",
+        "phone": phone,
         "displayFinancialStatus": "PAID" if outstanding == "0.00" else "PENDING",
         "displayFulfillmentStatus": "UNFULFILLED",
         "paymentGatewayNames": gateways if gateways is not None else ["razorpay"],
         "currencyCode": "INR",
         "totalPriceSet": {"shopMoney": {"amount": total, "currencyCode": "INR"}},
         "totalOutstandingSet": {"shopMoney": {"amount": outstanding, "currencyCode": "INR"}},
-        "customer": {"displayName": "Asha Rao"},
+        "customer": {"displayName": customer_name},
+        "clientIp": client_ip,
         "shippingAddress": address,
+        "billingAddress": billing_address,
         "risk": {
             "recommendation": recommendation,
             "assessments": [
@@ -152,6 +160,8 @@ class FakeShopifyAdmin:
     cancelled_fulfillments: list[str] = field(default_factory=list)
     tags_added: list[tuple[str, list[str]]] = field(default_factory=list)
     fulfillment_error: Exception | None = None
+    holds_placed: list[tuple[str, str, str]] = field(default_factory=list)
+    hold_error: Exception | None = None
 
     def put(self, raw: dict[str, Any]) -> None:
         self.orders[raw["id"]] = raw
@@ -224,6 +234,27 @@ class FakeShopifyAdmin:
             for f in items:
                 if f["id"] == fulfillment_gid:
                     f["status"] = "CANCELLED"
+
+    def hold_fulfillment_order(self, fo_gid: str, *, reason: str, notes: str) -> str:
+        if self.hold_error:
+            raise self.hold_error
+        fo = self.fo(fo_gid)
+        hold = {
+            "id": f"gid://shopify/FulfillmentHold/{len(self.holds_placed) + 100}",
+            "reason": reason,
+            "reasonNotes": notes,
+            "displayReason": reason,
+        }
+        fo["status"] = "ON_HOLD"
+        fo["fulfillmentHolds"] = [*fo["fulfillmentHolds"], hold]
+        self.holds_placed.append((fo_gid, reason, notes))
+        return str(hold["id"])
+
+    def release_holds(self, fo_gid: str) -> None:
+        """What staff do in Shopify admin after verifying the customer."""
+        fo = self.fo(fo_gid)
+        fo["status"] = "OPEN"
+        fo["fulfillmentHolds"] = []
 
     def add_tags(self, resource_gid: str, tags: list[str]) -> None:
         self.tags_added.append((resource_gid, tags))

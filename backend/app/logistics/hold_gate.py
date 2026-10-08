@@ -10,7 +10,8 @@ Safety rules, in order of precedence:
 2. Review tags (DUPLICATE-REVIEW / RISK-REVIEW) and HIGH risk block even without a hold, until a
    hold lifecycle has been observed (hold seen, or hold released) or staff override. This covers
    the race where Flow has tagged the order but not yet placed the hold. Tags can only ever
-   block; they never allow shipping.
+   block; they never allow shipping. Trekiva's own review flags (location risk, duplicate
+   order; see `review_checks`) block the same way while Trekiva places its Shopify hold.
 3. A settle window and (optionally) Shopify risk analysis must complete before allocation, so
    Flow's duplicate/risk workflows get the chance to act first.
 """
@@ -62,6 +63,7 @@ class GateReason(StrEnum):
     NOTHING_TO_FULFILL = "NOTHING_TO_FULFILL"
     AUTOMATION_DISABLED = "AUTOMATION_DISABLED"
     REVIEW_TAG_WITHOUT_HOLD = "REVIEW_TAG_WITHOUT_HOLD"
+    REVIEW_CHECK_FLAGGED = "REVIEW_CHECK_FLAGGED"
     HIGH_RISK_WITHOUT_HOLD = "HIGH_RISK_WITHOUT_HOLD"
     PAYMENT_MODE_UNRESOLVED = "PAYMENT_MODE_UNRESOLVED"
     MISSING_SHIPPING_ADDRESS = "MISSING_SHIPPING_ADDRESS"
@@ -74,6 +76,7 @@ class GateReason(StrEnum):
 OVERRIDABLE_REASONS: frozenset[GateReason] = frozenset(
     {
         GateReason.REVIEW_TAG_WITHOUT_HOLD,
+        GateReason.REVIEW_CHECK_FLAGGED,
         GateReason.HIGH_RISK_WITHOUT_HOLD,
         GateReason.PAYMENT_MODE_UNRESOLVED,
     }
@@ -116,7 +119,9 @@ def evaluate_gate(
     payment_mode: PaymentMode,
     automation_disabled: bool,
     now: datetime,
+    review_flags: tuple[str, ...] = (),
 ) -> GateDecision:
+    """`review_flags` are the details of what Trekiva's review checks found (empty = nothing)."""
     fo = fulfillment_order
 
     if order.cancelled_at is not None:
@@ -198,6 +203,12 @@ def evaluate_gate(
 
     # 3. Defence in depth: never trust "no hold" while review signals are present.
     if not history.review_cleared:
+        if review_flags:
+            return GateDecision(
+                GateAction.MANUAL_REVIEW,
+                GateReason.REVIEW_CHECK_FLAGGED,
+                f"{' '.join(review_flags)} Verify the customer, then release the hold in Shopify.",
+            )
         matched = [t for t in settings.review_tags if order.has_tag(t)]
         if matched:
             return GateDecision(

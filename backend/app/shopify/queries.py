@@ -22,9 +22,11 @@ query OrderForLogistics($id: ID!) {
     totalPriceSet { shopMoney { amount currencyCode } }
     totalOutstandingSet { shopMoney { amount currencyCode } }
     customer { displayName }
+    clientIp
     shippingAddress {
       name company address1 address2 city province provinceCode zip country countryCodeV2 phone
     }
+    billingAddress { name city province provinceCode zip country countryCodeV2 }
     risk {
       recommendation
       assessments { riskLevel }
@@ -100,6 +102,15 @@ FULFILLMENT_CANCEL = """
 mutation TrekivaFulfillmentCancel($id: ID!) {
   fulfillmentCancel(id: $id) {
     fulfillment { id status }
+    userErrors { field message }
+  }
+}
+"""
+
+FULFILLMENT_ORDER_HOLD = """
+mutation TrekivaFulfillmentOrderHold($id: ID!, $fulfillmentHold: FulfillmentOrderHoldInput!) {
+  fulfillmentOrderHold(id: $id, fulfillmentHold: $fulfillmentHold) {
+    fulfillmentHold { id }
     userErrors { field message }
   }
 }

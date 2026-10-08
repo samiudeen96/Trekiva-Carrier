@@ -115,10 +115,12 @@ def parse_order(raw: dict[str, Any]) -> OrderSnapshot:
         email=raw.get("email"),
         phone=raw.get("phone"),
         customer_name=(raw.get("customer") or {}).get("displayName"),
+        client_ip=raw.get("clientIp") or None,
         currency=raw.get("currencyCode") or "INR",
         total_price=_money(raw.get("totalPriceSet")),
         outstanding=_money(raw.get("totalOutstandingSet")),
         shipping_address=parse_address(raw.get("shippingAddress")),
+        billing_address=parse_address(raw.get("billingAddress")),
         risk=RiskSnapshot(
             recommendation=risk_raw.get("recommendation"),
             levels=tuple(

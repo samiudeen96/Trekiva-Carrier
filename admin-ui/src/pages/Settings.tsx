@@ -15,6 +15,13 @@ interface SettingsForm {
   risk_wait_max_seconds: string;
   review_tags: string;
   block_on_high_risk: boolean;
+  location_check_enabled: boolean;
+  location_check_ip: boolean;
+  location_check_billing: boolean;
+  risk_review_tag: string;
+  duplicate_check_enabled: boolean;
+  duplicate_window_hours: string;
+  duplicate_review_tag: string;
   cod_gateway_names: string;
   fulfill_on: FulfillOn;
   notify_customer: boolean;
@@ -36,6 +43,13 @@ function toForm({ automation_enabled, settings: s }: SettingsResponse): Settings
     risk_wait_max_seconds: String(s.risk_wait_max_seconds),
     review_tags: joinList(s.review_tags),
     block_on_high_risk: s.block_on_high_risk,
+    location_check_enabled: s.location_check_enabled,
+    location_check_ip: s.location_check_ip,
+    location_check_billing: s.location_check_billing,
+    risk_review_tag: s.risk_review_tag,
+    duplicate_check_enabled: s.duplicate_check_enabled,
+    duplicate_window_hours: String(s.duplicate_window_hours),
+    duplicate_review_tag: s.duplicate_review_tag,
     cod_gateway_names: joinList(s.cod_gateway_names),
     fulfill_on: s.fulfill_on,
     notify_customer: s.notify_customer,
@@ -62,6 +76,12 @@ function toPayload(form: SettingsForm): { settings: ShopSettings | null; errors:
   if (attempts === null || Number.isNaN(attempts) || attempts < 1 || attempts > 10) {
     errors.max_create_attempts_per_carrier = 'Enter a whole number between 1 and 10';
   }
+  const windowHours = parseOptionalInt(form.duplicate_window_hours);
+  if (windowHours === null || Number.isNaN(windowHours) || windowHours < 1 || windowHours > 720) {
+    errors.duplicate_window_hours = 'Enter whole hours between 1 and 720';
+  }
+  if (!form.risk_review_tag.trim()) errors.risk_review_tag = 'Required';
+  if (!form.duplicate_review_tag.trim()) errors.duplicate_review_tag = 'Required';
   if (Object.keys(errors).length > 0) return { settings: null, errors };
   return {
     settings: {
@@ -71,6 +91,13 @@ function toPayload(form: SettingsForm): { settings: ShopSettings | null; errors:
       risk_wait_max_seconds: riskWait,
       review_tags: parseList(form.review_tags),
       block_on_high_risk: form.block_on_high_risk,
+      location_check_enabled: form.location_check_enabled,
+      location_check_ip: form.location_check_ip,
+      location_check_billing: form.location_check_billing,
+      risk_review_tag: form.risk_review_tag.trim(),
+      duplicate_check_enabled: form.duplicate_check_enabled,
+      duplicate_window_hours: windowHours ?? 24,
+      duplicate_review_tag: form.duplicate_review_tag.trim(),
       cod_gateway_names: parseList(form.cod_gateway_names),
       fulfill_on: form.fulfill_on,
       notify_customer: form.notify_customer,
@@ -205,6 +232,70 @@ export function SettingsPage() {
                   details="Send HIGH-risk orders to Manual Review even if no Shopify hold was placed (in case a Flow workflow failed)."
                   onChange={(e) => set('block_on_high_risk', e.currentTarget.checked)}
                 />
+              </s-stack>
+            </s-section>
+
+            <s-section heading="Review checks">
+              <s-stack gap="base">
+                <s-paragraph color="subdued">
+                  Checked once, when an order is otherwise ready to ship. A flagged order is put on hold in Shopify and
+                  tagged, so the alert shows on the Shopify order. Verify the customer, then release the hold in Shopify
+                  and Trekiva ships it normally. Customers are never stopped from placing an order.
+                </s-paragraph>
+                <s-switch
+                  label="Location risk check"
+                  checked={form.location_check_enabled}
+                  details="Flag orders where the customer ordered from a different state than the delivery address (e.g. ordered from Mumbai, delivering to Chennai)."
+                  onChange={(e) => set('location_check_enabled', e.currentTarget.checked)}
+                />
+                {form.location_check_enabled && (
+                  <>
+                    <s-checkbox
+                      label="Compare the customer's IP location"
+                      checked={form.location_check_ip}
+                      details="Needs the GeoIP database on the server (GEOIP_CITY_DB_PATH). Mobile networks sometimes report a neighbouring state."
+                      onChange={(e) => set('location_check_ip', e.currentTarget.checked)}
+                    />
+                    <s-checkbox
+                      label="Compare the billing address"
+                      checked={form.location_check_billing}
+                      details="Flag orders whose billing address is in a different state from the delivery address."
+                      onChange={(e) => set('location_check_billing', e.currentTarget.checked)}
+                    />
+                    <s-text-field
+                      label="Risk order tag"
+                      value={form.risk_review_tag}
+                      error={errors.risk_review_tag}
+                      onInput={(e) => set('risk_review_tag', e.currentTarget.value)}
+                    />
+                  </>
+                )}
+                <s-switch
+                  label="Duplicate order check"
+                  checked={form.duplicate_check_enabled}
+                  details="Flag an order when another order has the same phone number, the same customer name and at least one product (SKU) in common."
+                  onChange={(e) => set('duplicate_check_enabled', e.currentTarget.checked)}
+                />
+                {form.duplicate_check_enabled && (
+                  <>
+                    <s-number-field
+                      label="Look for matching orders within"
+                      value={form.duplicate_window_hours}
+                      suffix="hours"
+                      min={1}
+                      max={720}
+                      step={1}
+                      error={errors.duplicate_window_hours}
+                      onInput={(e) => set('duplicate_window_hours', e.currentTarget.value)}
+                    />
+                    <s-text-field
+                      label="Duplicate order tag"
+                      value={form.duplicate_review_tag}
+                      error={errors.duplicate_review_tag}
+                      onInput={(e) => set('duplicate_review_tag', e.currentTarget.value)}
+                    />
+                  </>
+                )}
               </s-stack>
             </s-section>
 

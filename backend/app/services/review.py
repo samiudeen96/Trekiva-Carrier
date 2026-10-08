@@ -50,6 +50,7 @@ def _row(fo: ShopifyFulfillmentOrder) -> dict[str, Any]:
         "hold_reasons": fo.hold_reasons,
         "reason": fo.status_reason,
         "detail": fo.status_detail,
+        "review_flags": fo.review_flags,
         "is_shopify_hold": fo.status_reason == GateReason.SHOPIFY_FULFILLMENT_HOLD.value,
         "can_override": fo.status_reason in _OVERRIDABLE,
         "line_items": [

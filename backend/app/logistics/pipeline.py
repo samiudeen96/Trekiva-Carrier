@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app import alerts
 from app.core.enums import AlertSeverity, LogisticsStatus, LogLevel, PaymentMode, ShipmentStatus
 from app.core.time import utcnow
+from app.logistics import review_checks
 from app.logistics.hold_gate import (
     GateAction,
     GateDecision,
@@ -143,22 +144,42 @@ def evaluate_fulfillment_order(
     if previous not in GATE_FULL_EVAL and previous not in GATE_BLOCK_ONLY_EVAL:
         return Evaluation(fo.id, fo.shopify_fulfillment_order_id, previous, previous, None)
 
-    decision = evaluate_gate(
-        order=order_snap,
-        fulfillment_order=fo_snap,
-        history=GateHistory(
-            hold_last_seen_at=fo.hold_last_seen_at,
-            hold_released_at=fo.hold_released_at,
-            review_override_at=fo.review_override_at,
-        ),
-        settings=settings,
-        payment_mode=payment_mode,
-        # An explicit staff action (manual carrier, re-run) proceeds even when automation is off
-        # for the order. Holds and every other check still apply.
-        automation_disabled=order.automation_disabled and not fo.staff_initiated,
-        now=now,
+    history = GateHistory(
+        hold_last_seen_at=fo.hold_last_seen_at,
+        hold_released_at=fo.hold_released_at,
+        review_override_at=fo.review_override_at,
     )
+
+    def gate(flags: tuple[str, ...]) -> GateDecision:
+        return evaluate_gate(
+            order=order_snap,
+            fulfillment_order=fo_snap,
+            history=history,
+            settings=settings,
+            payment_mode=payment_mode,
+            # An explicit staff action (manual carrier, re-run) proceeds even when automation is
+            # off for the order. Holds and every other check still apply.
+            automation_disabled=order.automation_disabled and not fo.staff_initiated,
+            now=now,
+            review_flags=flags,
+        )
+
+    decision = gate(tuple(str(f["detail"]) for f in fo.review_flags))
     fo.last_evaluated_at = now
+    if (
+        decision.action == GateAction.PROCEED
+        and previous in GATE_FULL_EVAL
+        and fo.review_checked_at is None
+    ):
+        # Trekiva's review checks run once, when the order is first ready to ship. An order
+        # that was already reviewed (a hold released, or staff approval) is not checked again.
+        fo.review_checked_at = now
+        if not history.review_cleared:
+            flags = review_checks.run_checks(db, shop.id, order, order_snap, settings)
+            fo.review_flags = [f.as_json() for f in flags]
+            if flags:
+                decision = gate(tuple(f.detail for f in flags))
+                enqueue.enqueue_after_commit(db, enqueue.PLACE_REVIEW_HOLD, fo.id)
     if decision.reason == GateReason.SHOPIFY_FULFILLMENT_HOLD:
         fo.hold_last_seen_at = now
 

@@ -122,13 +122,23 @@ class OrderSnapshot(_Frozen):
     email: str | None = None
     phone: str | None = None
     customer_name: str | None = None
+    client_ip: str | None = None
+    """IP address the customer placed the order from (Shopify `clientIp`)."""
     currency: str
     total_price: Decimal
     outstanding: Decimal
     shipping_address: Address | None = None
+    billing_address: Address | None = None
     risk: RiskSnapshot = RiskSnapshot()
     fulfillment_orders: tuple[FulfillmentOrderSnapshot, ...] = ()
 
     def has_tag(self, tag: str) -> bool:
         wanted = tag.casefold()
         return any(t.casefold() == wanted for t in self.tags)
+
+    @property
+    def skus(self) -> frozenset[str]:
+        """Every SKU in the order (case-folded), across all fulfillment orders."""
+        return frozenset(
+            li.sku.casefold() for fo in self.fulfillment_orders for li in fo.line_items if li.sku
+        )

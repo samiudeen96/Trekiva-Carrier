@@ -17,6 +17,9 @@ htmlcov/
 node_modules/
 admin-ui/dist/
 
+# GeoIP database (licensed download, see .env.example)
+geoip/
+
 # Tooling
 .kilo/
 .DS_Store

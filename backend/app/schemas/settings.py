@@ -25,6 +25,21 @@ class ShopSettings(BaseModel):
     block_on_high_risk: bool = True
     """Block HIGH-risk orders that have no Shopify hold (in case Flow failed to place one)."""
 
+    # --- Trekiva review checks (run once, when an order is otherwise ready to ship) ----------
+    # A flagged order gets a Shopify fulfillment hold plus a review tag. Staff verify the
+    # customer and release the hold in Shopify; the order then ships normally.
+    location_check_enabled: bool = True
+    """Flag orders whose delivery state differs from where the customer ordered from."""
+    location_check_ip: bool = True
+    """Compare the customer's IP location (needs GEOIP_CITY_DB_PATH) with the delivery state."""
+    location_check_billing: bool = True
+    """Compare the billing address state with the delivery state."""
+    risk_review_tag: str = "RISK-REVIEW"
+    duplicate_check_enabled: bool = True
+    """Flag orders with the same phone, customer name and at least one SKU as another order."""
+    duplicate_window_hours: int = Field(default=24, ge=1, le=720)
+    duplicate_review_tag: str = "DUPLICATE-REVIEW"
+
     # --- Payment detection (COD King stays responsible for OTP + COD fee) ------------------
     cod_gateway_names: list[str] = Field(
         default_factory=lambda: ["Cash on Delivery (COD)", "Cash on Delivery", "COD"]
@@ -48,6 +63,13 @@ class ShopSettings(BaseModel):
     @classmethod
     def _strip(cls, values: list[str]) -> list[str]:
         return [v.strip() for v in values if v and v.strip()]
+
+    @field_validator("risk_review_tag", "duplicate_review_tag")
+    @classmethod
+    def _required_tag(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("review tag must not be empty")
+        return value.strip()
 
     @classmethod
     def load(cls, raw: dict[str, Any] | None) -> ShopSettings:
