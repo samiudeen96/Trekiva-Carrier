@@ -43,7 +43,8 @@ def flags(
     ip_location: IpLocation | None = None, settings: ShopSettings | None = None, **kwargs: Any
 ) -> list[Any]:
     snap = order_snapshot(client_ip="49.36.10.1" if ip_location else None, **kwargs)
-    return location_flags(snap, settings or ShopSettings(), lambda _ip: ip_location)
+    settings = settings or ShopSettings(location_check_ip=True)
+    return location_flags(snap, settings, lambda _ip: ip_location)
 
 
 def test_ip_in_another_state_is_a_risk_order() -> None:
@@ -53,6 +54,10 @@ def test_ip_in_another_state_is_a_risk_order() -> None:
     assert flag.tag == "RISK-REVIEW"
     assert "Mumbai, Maharashtra" in flag.detail
     assert "Chennai, Tamil Nadu" in flag.detail
+
+
+def test_ip_check_is_off_by_default() -> None:
+    assert flags(MUMBAI, ShopSettings(), shipping_address=CHENNAI) == []
 
 
 def test_ip_in_the_delivery_state_is_fine() -> None:

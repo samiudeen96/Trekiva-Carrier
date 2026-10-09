@@ -30,8 +30,9 @@ class ShopSettings(BaseModel):
     # customer and release the hold in Shopify; the order then ships normally.
     location_check_enabled: bool = True
     """Flag orders whose delivery state differs from where the customer ordered from."""
-    location_check_ip: bool = True
-    """Compare the customer's IP location (needs GEOIP_CITY_DB_PATH) with the delivery state."""
+    location_check_ip: bool = False
+    """Also compare the customer's IP location (needs GEOIP_CITY_DB_PATH) with the delivery state.
+    Off by default: mobile networks (Jio, Airtel) often report a hub state such as Maharashtra."""
     location_check_billing: bool = True
     """Compare the billing address state with the delivery state."""
     risk_review_tag: str = "RISK-REVIEW"

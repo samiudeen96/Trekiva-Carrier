@@ -190,6 +190,7 @@ def test_location_risk_order_is_held(
 ) -> None:
     mumbai = IpLocation(country_code="IN", state_code="MH", state_name="Maharashtra", city="Mumbai")
     monkeypatch.setattr("app.core.geoip.lookup", lambda _ip: mumbai)
+    shop.settings = ShopSettings(location_check_ip=True).model_dump(mode="json")
     setup_logistics(db, shop)
     place_order(db, shop, admin, 2401, client_ip="49.36.10.1")  # delivery: Bengaluru, Karnataka
     fo = fo_row(db, 2401)

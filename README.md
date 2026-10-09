@@ -28,14 +28,14 @@ Customers are never stopped from ordering. Once per order, when it is otherwise 
 
 | Check | Flags the order when | Tag |
 |---|---|---|
-| Location risk | The customer's IP location, or the billing address, is in a different **state** (or country) than the delivery address. Example: ordered from Mumbai, delivering to Chennai. Missing data never flags an order. | `RISK-REVIEW` |
+| Location risk | The **billing address** is in a different **state** (or country) than the delivery address. Example: billing in Mumbai, delivering to Chennai. Optionally also the customer's IP location (off by default). Missing data never flags an order. | `RISK-REVIEW` |
 | Duplicate order | Another order placed within 24 hours (either side) has the **same phone number, the same customer name and at least one SKU in common**. Cancelled orders are ignored. | `DUPLICATE-REVIEW` |
 
 A flagged order is **not** shipped. Trekiva puts its fulfillment order on hold in Shopify (`HIGH_RISK_OF_FRAUD` for location risk, `OTHER` for duplicates, with the reason in the hold notes) and adds the tag, so the alert shows on the Shopify order and in Trekiva's Manual Review page. Staff contact the customer, then either cancel the order or **release the hold in Shopify**; Trekiva then ships it automatically and does not flag it again. If Shopify refuses the hold, the order stays in Manual Review and staff can approve it there.
 
 Each check can be switched off, and the window and tags changed, under **Settings → Review checks**. Code: `logistics/review_checks.py`.
 
-**IP location setup.** The IP comparison needs a MaxMind GeoLite2-City database (free account at maxmind.com). Put `GeoLite2-City.mmdb` in `./geoip/` (mounted into the containers) and set `GEOIP_CITY_DB_PATH=/app/geoip/GeoLite2-City.mmdb`. Lookups are local, so customer IPs are never sent to a third party. Without the file, the IP comparison is skipped and the billing-address comparison still runs. Before going live, place a test order and confirm that Shopify's `clientIp` is the customer's IP: if an app such as COD King creates orders from its own servers, the IP is the app's, not the customer's, and the IP comparison should be switched off.
+**Optional IP location.** Off by default, because mobile networks (Jio, Airtel) often report a hub state such as Maharashtra and would cause false alerts. To try it, switch on *Also compare the customer's IP location* in Settings. It needs a MaxMind GeoLite2-City database (free account at maxmind.com). Put `GeoLite2-City.mmdb` in `./geoip/` (mounted into the containers) and set `GEOIP_CITY_DB_PATH=/app/geoip/GeoLite2-City.mmdb`. Lookups are local, so customer IPs are never sent to a third party. Without the file, the IP comparison is skipped and the billing-address comparison still runs. Before going live, place a test order and confirm that Shopify's `clientIp` is the customer's IP: if an app such as COD King creates orders from its own servers, the IP is the app's, not the customer's, and the IP comparison should be switched off.
 
 ### Trying it in a development store
 

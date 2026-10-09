@@ -251,7 +251,7 @@ export function SettingsPage() {
                 {form.location_check_enabled && (
                   <>
                     <s-checkbox
-                      label="Compare the customer's IP location"
+                      label="Also compare the customer's IP location (optional)"
                       checked={form.location_check_ip}
                       details="Needs the GeoIP database on the server (GEOIP_CITY_DB_PATH). Mobile networks sometimes report a neighbouring state."
                       onChange={(e) => set('location_check_ip', e.currentTarget.checked)}
